@@ -7,7 +7,7 @@ use ultraviolet::Vec3;
 use barnes_hut::octtree::Octree;
 fn bench_octree_construction(c: &mut Criterion) {
     let mut group = c.benchmark_group("Octree Construction");
-    group.measurement_time(Duration::from_secs(20));
+    group.measurement_time(Duration::from_secs(60));
 
     for size in (4usize..=20usize).map(|v| 1usize << v) {
         group.throughput(criterion::Throughput::Elements(size as u64));

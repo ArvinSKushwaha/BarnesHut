@@ -1,10 +1,11 @@
-use ultraviolet::Vec3;
+use ultraviolet::{Vec3, Vec3x8, f32x8};
 
 const EPSILON: f32 = 1e-7;
 
 #[derive(Clone, Debug)]
 pub struct Octree {
-    point: Option<(usize, Vec3, f32)>,
+    point: ([usize; 8], Vec3x8, f32x8),
+    count: u8,
     com: Vec3,
     total_mass: f32,
     children: Option<Box<[Octree; 8]>>,
@@ -39,8 +40,8 @@ impl Octree {
         octree.center = (min_bound + max_bound) / 2.0;
         octree.extent = max_bound - min_bound;
 
-        octree.center -= octree.extent * EPSILON;
-        octree.extent += octree.extent * 2. * EPSILON;
+        // octree.center -= octree.extent * EPSILON;
+        // octree.extent += octree.extent * 2. * EPSILON;
 
         points
             .iter()
@@ -55,8 +56,27 @@ impl Octree {
     }
 
     pub fn add_point(&mut self, idx: usize, point: Vec3, mass: f32) {
-        if self.point.is_none() {
-            self.point = Some((idx, point, mass));
+        if self.count < 8 {
+            let count = self.count as usize;
+
+            self.point.0[count] = idx;
+
+            let mut x_array = self.point.1.x.to_array();
+            let mut y_array = self.point.1.y.to_array();
+            let mut z_array = self.point.1.z.to_array();
+            let mut mass_array = self.point.2.to_array();
+
+            x_array[count] = point.x;
+            y_array[count] = point.y;
+            z_array[count] = point.z;
+            mass_array[count] = mass;
+
+            self.point.1.x = f32x8::new(x_array);
+            self.point.1.y = f32x8::new(y_array);
+            self.point.1.z = f32x8::new(z_array);
+            self.point.2 = f32x8::new(mass_array);
+
+            self.count += 1;
         } else {
             let child_idx = {
                 let diff = point - self.center;
@@ -99,10 +119,12 @@ impl Octree {
     pub fn compute(&mut self) {
         let (mut com, mut total_mass) = (Vec3::zero(), 0.);
 
-        if let Some((_, self_com, self_mass)) = self.point {
-            com += self_com * self_mass;
-            total_mass += self_mass;
-        }
+        let (_, self_com, self_mass) = self.point;
+        com += {
+            let tmp = self_com * self_mass;
+            Vec3::new(tmp.x.reduce_add(), tmp.y.reduce_add(), tmp.z.reduce_add())
+        };
+        total_mass += self_mass.reduce_add();
 
         if let Some(ref mut children) = self.children {
             children.iter_mut().for_each(Octree::compute);
@@ -124,9 +146,8 @@ impl Octree {
     }
 
     pub fn find(&self, idx: usize) -> Option<&Octree> {
-        match self.point {
-            Some((i, ..)) if i == idx => return Some(&self),
-            _ => {}
+        if self.point.0.contains(&idx) {
+            return Some(&self);
         }
 
         self.children
@@ -139,7 +160,8 @@ impl Octree {
 impl Default for Octree {
     fn default() -> Self {
         Self {
-            point: None,
+            point: ([0; 8], Vec3x8::zero(), f32x8::ZERO),
+            count: 0,
             total_mass: 0.0,
             com: Vec3::zero(),
             children: None,
@@ -180,21 +202,21 @@ mod tests {
             let half_extent = found.extent / 2.0;
 
             assert!(
-                -half_extent.x < disp.x && disp.x <= half_extent.x,
+                -half_extent.x <= disp.x && disp.x <= half_extent.x,
                 "{:?} not in {:?} with half_extent {:?}",
                 points[i],
                 found.center,
                 found.extent
             );
             assert!(
-                -half_extent.y < disp.y && disp.y <= half_extent.y,
+                -half_extent.y <= disp.y && disp.y <= half_extent.y,
                 "{:?} not in {:?} with half_extent {:?}",
                 points[i],
                 found.center,
                 found.extent
             );
             assert!(
-                -half_extent.z < disp.z && disp.z <= half_extent.z,
+                -half_extent.z <= disp.z && disp.z <= half_extent.z,
                 "{:?} not in {:?} with half_extent {:?}",
                 points[i],
                 found.center,
