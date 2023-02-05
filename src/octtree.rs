@@ -1,21 +1,15 @@
+use hashbrown::HashMap;
 use ultraviolet::{Vec3, Vec3x8, f32x8};
 
-const EPSILON: f32 = 1e-7;
-
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Octree {
-    point: ([usize; 8], Vec3x8, f32x8),
-    count: u8,
-    com: Vec3,
-    total_mass: f32,
-    children: Option<Box<[Octree; 8]>>,
-    center: Vec3,
-    extent: Vec3,
+    map: HashMap<u64, OctreeNode>,
 }
 
 impl Octree {
     pub fn construct(points: &[Vec3], masses: &[f32]) -> Self {
         let mut octree = Octree::default();
+        let mut root = OctreeNode::default();
 
         assert_eq!(
             points.len(),
@@ -25,6 +19,43 @@ impl Octree {
         if points.len() == 0 {
             return octree;
         }
+
+        let min_bound = points
+            .iter()
+            .copied()
+            .reduce(Vec3::min_by_component)
+            .unwrap();
+        let max_bound = points
+            .iter()
+            .copied()
+            .reduce(Vec3::max_by_component)
+            .unwrap();
+
+        root.center = (min_bound + max_bound) / 2.0;
+        root.extent = max_bound - min_bound;
+
+        octree
+    }
+
+    pub fn add_point(&mut self, idx: usize, point: Vec3, mass: f32) {
+
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct OctreeNode {
+    point: ([usize; 8], Vec3x8, f32x8),
+    count: u8,
+    com: Vec3,
+    total_mass: f32,
+    center: Vec3,
+    extent: Vec3,
+    loc_code: u64,
+}
+
+impl OctreeNode {
+    pub fn construct(points: &[Vec3], masses: &[f32]) -> Self {
+        let mut octree = OctreeNode::default();
 
         let min_bound = points
             .iter()
@@ -89,7 +120,7 @@ impl Octree {
         }
     }
 
-    pub fn get_child(&mut self, idx: usize) -> &mut Octree {
+    pub fn get_child(&mut self, idx: usize) -> &mut OctreeNode {
         if let Some(ref mut children) = self.children {
             &mut children[idx]
         } else {
@@ -104,7 +135,7 @@ impl Octree {
                 Vec3::new(1., 1., 1.),
             ];
 
-            let mut children: [Octree; 8] = Default::default();
+            let mut children: [OctreeNode; 8] = Default::default();
 
             children.iter_mut().enumerate().for_each(|(i, child)| {
                 child.extent = self.extent / 2.0;
@@ -127,7 +158,7 @@ impl Octree {
         total_mass += self_mass.reduce_add();
 
         if let Some(ref mut children) = self.children {
-            children.iter_mut().for_each(Octree::compute);
+            children.iter_mut().for_each(OctreeNode::compute);
 
             let (child_com, child_mass) = children.iter().fold((Vec3::zero(), 0.), |a, b| {
                 (a.0 + b.total_mass * b.com, a.1 + b.total_mass)
@@ -145,7 +176,7 @@ impl Octree {
         };
     }
 
-    pub fn find(&self, idx: usize) -> Option<&Octree> {
+    pub fn find(&self, idx: usize) -> Option<&OctreeNode> {
         if self.point.0.contains(&idx) {
             return Some(&self);
         }
@@ -157,7 +188,7 @@ impl Octree {
     }
 }
 
-impl Default for Octree {
+impl Default for OctreeNode {
     fn default() -> Self {
         Self {
             point: ([0; 8], Vec3x8::zero(), f32x8::ZERO),
@@ -173,7 +204,7 @@ impl Default for Octree {
 
 #[cfg(test)]
 mod tests {
-    use super::Octree;
+    use super::OctreeNode;
     use ultraviolet::Vec3;
 
     #[test]
@@ -190,7 +221,7 @@ mod tests {
         ];
         let masses = vec![1.; 8];
 
-        let oct = Octree::construct(&points, &masses);
+        let oct = OctreeNode::construct(&points, &masses);
         println!("{:#?}", oct);
 
         assert_eq!(oct.total_mass, 8.);
