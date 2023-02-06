@@ -96,6 +96,7 @@ dependencies = [
  "log",
  "pixels",
  "rand",
+ "rayon",
  "ultraviolet",
  "winit",
  "winit_input_helper",

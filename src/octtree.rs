@@ -1,7 +1,5 @@
 use ultraviolet::{Vec3, Vec3x8, f32x8};
 
-const EPSILON: f32 = 1e-7;
-
 #[derive(Clone, Debug)]
 pub struct Octree {
     point: ([usize; 8], Vec3x8, f32x8),
